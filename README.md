@@ -9,13 +9,9 @@
 - **Graph Neural Networks** for network optimisation prototype
 - **Machine Learning** applications in business intelligence  
 - **Mathematical modeling** of complex systems
-- **advanced probability/statistical modles** implementations 
+- **advanced probability/statistical modles** implementations
 
-## 🚀 Featured Project
-### [Topological Anomaly Detection in Retail Sales](https://github.com/kelmnberg/topological-anomaly-detection)
-*Advanced anomaly detection using persistent homology to find coordination patterns in Walmart sales data*
-
-**Key Insight:** While traditional methods found 4 volume anomalies, TDA revealed no systemic coordination issues - demonstrating the stability of store relationships.
+---
 
 ## 📊 Skills
 - **Mathematics:**  Linear Algebra, Probability,Calculus
