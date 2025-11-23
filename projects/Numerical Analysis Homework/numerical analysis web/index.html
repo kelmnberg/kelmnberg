@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numerical Analysis Visualizer</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Lucide React icons as inline SVG components
+        const Play = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+        );
+
+        const Pause = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+        );
+
+        const SkipBack = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+        );
+
+        const SkipForward = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+        );
+
+        const Zap = () => (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+        );
+
+        // Algorithm implementation with step tracking
+        const createAlgorithmSteps = (A, B, method) => {
+            const steps = [];
+            const n = A.length;
+            
+            if (method === 'lu') {
+                const L = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => i === j ? 1 : 0));
+                const U = Array(n).fill(0).map(() => Array(n).fill(0));
+                const ACopy = A.map(row => [...row]);
+                
+                steps.push({
+                    description: 'Starting LU Decomposition (Crout Method)',
+                    equation: 'A = L · U where L has 1s on diagonal',
+                    L: L.map(row => [...row]),
+                    U: U.map(row => [...row]),
+                    highlights: []
+                });
+                
+                for (let k = 0; k < n; k++) {
+                    // Calculate U row k
+                    for (let j = k; j < n; j++) {
+                        let sum = 0;
+                        for (let p = 0; p < k; p++) {
+                            sum += L[k][p] * U[p][j];
+                        }
+                        U[k][j] = ACopy[k][j] - sum;
+                        
+                        steps.push({
+                            description: `Calculate U[${k}][${j}]`,
+                            equation: `U[${k}][${j}] = A[${k}][${j}] - Σ(L[${k}][p] · U[p][${j}]) = ${U[k][j].toFixed(3)}`,
+                            L: L.map(row => [...row]),
+                            U: U.map(row => [...row]),
+                            highlights: [{ matrix: 'U', row: k, col: j, type: 'calculating' }]
+                        });
+                    }
+                    
+                    // Calculate L column k
+                    for (let i = k + 1; i < n; i++) {
+                        let sum = 0;
+                        for (let p = 0; p < k; p++) {
+                            sum += L[i][p] * U[p][k];
+                        }
+                        if (U[k][k] === 0) throw new Error('Zero pivot detected');
+                        L[i][k] = (ACopy[i][k] - sum) / U[k][k];
+                        
+                        steps.push({
+                            description: `Calculate L[${i}][${k}]`,
+                            equation: `L[${i}][${k}] = (A[${i}][${k}] - Σ(L[${i}][p] · U[p][${k}])) / U[${k}][${k}] = ${L[i][k].toFixed(3)}`,
+                            L: L.map(row => [...row]),
+                            U: U.map(row => [...row]),
+                            highlights: [{ matrix: 'L', row: i, col: k, type: 'calculating' }]
+                        });
+                    }
+                }
+                
+                // Forward substitution L·y = B
+                const y = Array(n).fill(0);
+                steps.push({
+                    description: 'Forward Substitution: Solving L·y = b',
+                    equation: 'Finding intermediate vector y',
+                    L: L.map(row => [...row]),
+                    U: U.map(row => [...row]),
+                    y: [...y],
+                    highlights: []
+                });
+                
+                for (let i = 0; i < n; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < i; j++) {
+                        sum += L[i][j] * y[j];
+                    }
+                    y[i] = (B[i] - sum) / L[i][i];
+                    
+                    steps.push({
+                        description: `Calculate y[${i}]`,
+                        equation: `y[${i}] = (b[${i}] - Σ(L[${i}][j] · y[j])) / L[${i}][${i}] = ${y[i].toFixed(3)}`,
+                        L: L.map(row => [...row]),
+                        U: U.map(row => [...row]),
+                        y: [...y],
+                        highlights: [{ matrix: 'y', row: i, col: 0, type: 'calculating' }]
+                    });
+                }
+                
+                // Backward substitution U·x = y
+                const x = Array(n).fill(0);
+                steps.push({
+                    description: 'Backward Substitution: Solving U·x = y',
+                    equation: 'Finding solution vector x',
+                    L: L.map(row => [...row]),
+                    U: U.map(row => [...row]),
+                    y: [...y],
+                    x: [...x],
+                    highlights: []
+                });
+                
+                for (let i = n - 1; i >= 0; i--) {
+                    let sum = 0;
+                    for (let j = i + 1; j < n; j++) {
+                        sum += U[i][j] * x[j];
+                    }
+                    x[i] = (y[i] - sum) / U[i][i];
+                    
+                    steps.push({
+                        description: `Calculate x[${i}]`,
+                        equation: `x[${i}] = (y[${i}] - Σ(U[${i}][j] · x[j])) / U[${i}][${i}] = ${x[i].toFixed(3)}`,
+                        L: L.map(row => [...row]),
+                        U: U.map(row => [...row]),
+                        y: [...y],
+                        x: [...x],
+                        highlights: [{ matrix: 'x', row: i, col: 0, type: 'calculating' }],
+                        isFinal: i === 0
+                    });
+                }
+                
+            } else {
+                // Gauss Elimination
+                const AGauss = A.map(row => [...row]);
+                const BGauss = [...B];
+                
+                steps.push({
+                    description: 'Starting Gauss Elimination with Partial Pivoting',
+                    equation: 'Transform A to upper triangular form',
+                    A: AGauss.map(row => [...row]),
+                    b: [...BGauss],
+                    highlights: []
+                });
+                
+                for (let i = 0; i < n; i++) {
+                    // Partial pivoting
+                    let maxRow = i;
+                    for (let k = i + 1; k < n; k++) {
+                        if (Math.abs(AGauss[k][i]) > Math.abs(AGauss[maxRow][i])) {
+                            maxRow = k;
+                        }
+                    }
+                    
+                    if (maxRow !== i) {
+                        [AGauss[i], AGauss[maxRow]] = [AGauss[maxRow], AGauss[i]];
+                        [BGauss[i], BGauss[maxRow]] = [BGauss[maxRow], BGauss[i]];
+                        
+                        steps.push({
+                            description: `Swap rows ${i} and ${maxRow} (pivoting)`,
+                            equation: `|A[${maxRow}][${i}]| > |A[${i}][${i}]|`,
+                            A: AGauss.map(row => [...row]),
+                            b: [...BGauss],
+                            highlights: [
+                                { matrix: 'A', row: i, col: i, type: 'pivot' },
+                                { matrix: 'A', row: maxRow, col: i, type: 'pivot' }
+                            ]
+                        });
+                    }
+                    
+                    if (AGauss[i][i] === 0) throw new Error('Singular matrix');
+                    
+                    // Elimination
+                    for (let j = i + 1; j < n; j++) {
+                        const factor = AGauss[j][i] / AGauss[i][i];
+                        
+                        steps.push({
+                            description: `Eliminate A[${j}][${i}] using row ${i}`,
+                            equation: `factor = A[${j}][${i}] / A[${i}][${i}] = ${factor.toFixed(3)}`,
+                            A: AGauss.map(row => [...row]),
+                            b: [...BGauss],
+                            highlights: [{ matrix: 'A', row: j, col: i, type: 'calculating' }]
+                        });
+                        
+                        for (let k = i; k < n; k++) {
+                            AGauss[j][k] -= factor * AGauss[i][k];
+                        }
+                        BGauss[j] -= factor * BGauss[i];
+                        
+                        steps.push({
+                            description: `Row ${j} = Row ${j} - ${factor.toFixed(3)} × Row ${i}`,
+                            equation: `A[${j}] -= ${factor.toFixed(3)} × A[${i}]`,
+                            A: AGauss.map(row => [...row]),
+                            b: [...BGauss],
+                            highlights: [{ matrix: 'A', row: j, col: i, type: 'calculated' }]
+                        });
+                    }
+                }
+                
+                // Backward substitution
+                const x = Array(n).fill(0);
+                steps.push({
+                    description: 'Backward Substitution: Solving U·x = b',
+                    equation: 'Matrix is now upper triangular',
+                    A: AGauss.map(row => [...row]),
+                    b: [...BGauss],
+                    x: [...x],
+                    highlights: []
+                });
+                
+                for (let i = n - 1; i >= 0; i--) {
+                    let sum = 0;
+                    for (let j = i + 1; j < n; j++) {
+                        sum += AGauss[i][j] * x[j];
+                    }
+                    x[i] = (BGauss[i] - sum) / AGauss[i][i];
+                    
+                    steps.push({
+                        description: `Calculate x[${i}]`,
+                        equation: `x[${i}] = (b[${i}] - Σ(A[${i}][j] · x[j])) / A[${i}][${i}] = ${x[i].toFixed(3)}`,
+                        A: AGauss.map(row => [...row]),
+                        b: [...BGauss],
+                        x: [...x],
+                        highlights: [{ matrix: 'x', row: i, col: 0, type: 'calculating' }],
+                        isFinal: i === 0
+                    });
+                }
+            }
+            
+            return steps;
+        };
+
+        const MatrixDisplay = ({ matrix, label, highlights = [], vectorLabel = null }) => {
+            const n = matrix.length;
+            const isVector = matrix[0] === undefined || !Array.isArray(matrix[0]);
+            
+            const getHighlight = (row, col) => {
+                const highlight = highlights.find(h => 
+                    h.matrix === label && h.row === row && h.col === (isVector ? 0 : col)
+                );
+                if (highlight) {
+                    if (highlight.type === 'calculating') return 'bg-yellow-200 border-yellow-400';
+                    if (highlight.type === 'calculated') return 'bg-green-200 border-green-400';
+                    if (highlight.type === 'pivot') return 'bg-blue-200 border-blue-400';
+                }
+                return 'bg-white border-gray-300';
+            };
+            
+            return (
+                <div className="flex flex-col items-center">
+                    <div className="text-sm font-semibold mb-2 text-gray-700">
+                        {vectorLabel || label}
+                    </div>
+                    <div className="inline-flex items-center gap-1">
+                        <div className="text-3xl font-thin text-gray-400">[</div>
+                        <div className={`grid gap-1 ${isVector ? 'grid-cols-1' : `grid-cols-${matrix[0]?.length || n}`}`}>
+                            {isVector ? (
+                                matrix.map((val, i) => (
+                                    <div
+                                        key={i}
+                                        className={`w-16 h-10 flex items-center justify-center border-2 rounded transition-all duration-300 ${getHighlight(i, 0)}`}
+                                    >
+                                        <span className="text-sm font-mono">{val?.toFixed(2) || '0.00'}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                matrix.map((row, i) =>
+                                    row.map((val, j) => (
+                                        <div
+                                            key={`${i}-${j}`}
+                                            className={`w-16 h-10 flex items-center justify-center border-2 rounded transition-all duration-300 ${getHighlight(i, j)}`}
+                                        >
+                                            <span className="text-sm font-mono">{val?.toFixed(2) || '0.00'}</span>
+                                        </div>
+                                    ))
+                                )
+                            )}
+                        </div>
+                        <div className="text-3xl font-thin text-gray-400">]</div>
+                    </div>
+                </div>
+            );
+        };
+
+        function NumericalAnalysisVisualizer() {
+            const [size, setSize] = useState(3);
+            const [matrixA, setMatrixA] = useState(Array(3).fill(0).map(() => Array(3).fill(0)));
+            const [vectorB, setVectorB] = useState(Array(3).fill(0));
+            const [method, setMethod] = useState('lu');
+            const [steps, setSteps] = useState([]);
+            const [currentStep, setCurrentStep] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [speed, setSpeed] = useState(1500);
+            const [error, setError] = useState('');
+
+            useEffect(() => {
+                if (isPlaying && currentStep < steps.length - 1) {
+                    const timer = setTimeout(() => {
+                        setCurrentStep(prev => prev + 1);
+                    }, speed);
+                    return () => clearTimeout(timer);
+                } else if (currentStep >= steps.length - 1) {
+                    setIsPlaying(false);
+                }
+            }, [isPlaying, currentStep, steps.length, speed]);
+
+            const handleSizeChange = (newSize) => {
+                setSize(newSize);
+                setMatrixA(Array(newSize).fill(0).map(() => Array(newSize).fill(0)));
+                setVectorB(Array(newSize).fill(0));
+                setSteps([]);
+                setCurrentStep(0);
+                setError('');
+            };
+
+            const handleMatrixChange = (i, j, value) => {
+                const newMatrix = [...matrixA];
+                newMatrix[i][j] = parseFloat(value) || 0;
+                setMatrixA(newMatrix);
+            };
+
+            const handleVectorChange = (i, value) => {
+                const newVector = [...vectorB];
+                newVector[i] = parseFloat(value) || 0;
+                setVectorB(newVector);
+            };
+
+            const loadExample = () => {
+                if (size === 3) {
+                    setMatrixA([[4, -1, 0], [-1, 4, -1], [0, -1, 4]]);
+                    setVectorB([15, 10, 10]);
+                } else if (size === 2) {
+                    setMatrixA([[2, 1], [1, 3]]);
+                    setVectorB([5, 6]);
+                }
+            };
+
+            const solve = () => {
+                try {
+                    setError('');
+                    const algorithmSteps = createAlgorithmSteps(matrixA, vectorB, method);
+                    setSteps(algorithmSteps);
+                    setCurrentStep(0);
+                } catch (err) {
+                    setError(err.message);
+                }
+            };
+
+            const reset = () => {
+                setSteps([]);
+                setCurrentStep(0);
+                setIsPlaying(false);
+                setError('');
+            };
+
+            const currentStepData = steps[currentStep];
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
+                        <div className="max-w-7xl mx-auto px-6 py-8">
+                            <h1 className="text-4xl font-bold mb-2">Numerical Analysis Visualizer</h1>
+                            <p className="text-blue-100 text-lg">by Mohamed Gazzeh · ESSTHS University</p>
+                        </div>
+                    </div>
+
+                    <div className="max-w-7xl mx-auto px-6 py-8">
+                        {/* Input Section */}
+                        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Input Configuration</h2>
+                            
+                            <div className="flex flex-wrap gap-4 mb-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Matrix Size</label>
+                                    <select
+                                        value={size}
+                                        onChange={(e) => handleSizeChange(Number(e.target.value))}
+                                        className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value={2}>2×2</option>
+                                        <option value={3}>3×3</option>
+                                        <option value={4}>4×4</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Method</label>
+                                    <select
+                                        value={method}
+                                        onChange={(e) => setMethod(e.target.value)}
+                                        className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="lu">LU Decomposition</option>
+                                        <option value="gauss">Gauss Elimination</option>
+                                    </select>
+                                </div>
+
+                                <div className="flex items-end">
+                                    <button
+                                        onClick={loadExample}
+                                        className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors flex items-center gap-2"
+                                    >
+                                        <Zap />
+                                        Load Example
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-8 items-center justify-center">
+                                {/* Matrix A */}
+                                <div>
+                                    <div className="text-center font-semibold mb-2">Matrix A</div>
+                                    <div className="inline-flex items-center gap-1">
+                                        <div className="text-3xl font-thin text-gray-400">[</div>
+                                        <div className={`grid gap-1 grid-cols-${size}`}>
+                                            {matrixA.map((row, i) =>
+                                                row.map((val, j) => (
+                                                    <input
+                                                        key={`${i}-${j}`}
+                                                        type="number"
+                                                        value={val}
+                                                        onChange={(e) => handleMatrixChange(i, j, e.target.value)}
+                                                        className="w-16 h-10 text-center border-2 border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+                                                        step="0.1"
+                                                    />
+                                                ))
+                                            )}
+                                        </div>
+                                        <div className="text-3xl font-thin text-gray-400">]</div>
+                                    </div>
+                                </div>
+
+                                <div className="text-2xl font-bold text-gray-600">·</div>
+                                <div className="text-center">
+                                    <div className="font-semibold mb-2">x</div>
+                                    <div className="text-2xl text-gray-400">=</div>
+                                </div>
+
+                                {/* Vector B */}
+                                <div>
+                                    <div className="text-center font-semibold mb-2">Vector b</div>
+                                    <div className="inline-flex items-center gap-1">
+                                        <div className="text-3xl font-thin text-gray-400">[</div>
+                                        <div className="grid gap-1 grid-cols-1">
+                                            {vectorB.map((val, i) => (
+                                                <input
+                                                    key={i}
+                                                    type="number"
+                                                    value={val}
+                                                    onChange={(e) => handleVectorChange(i, e.target.value)}
+                                                    className="w-16 h-10 text-center border-2 border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+                                                    step="0.1"
+                                                />
+                                            ))}
+                                        </div>
+                                        <div className="text-3xl font-thin text-gray-400">]</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 mt-6 justify-center">
+                                <button
+                                    onClick={solve}
+                                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-md"
+                                >
+                                    Solve System
+                                </button>
+                                <button
+                                    onClick={reset}
+                                    className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold transition-colors"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+
+                            {error && (
+                                <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                                    {error}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Visualization Section */}
+                        {steps.length > 0 && (
+                            <div className="bg-white rounded-xl shadow-md p-6">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-4">Step-by-Step Visualization</h2>
+                                
+                                {/* Controls */}
+                                <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                                    <button
+                                        onClick={() => setCurrentStep(0)}
+                                        className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                                        disabled={currentStep === 0}
+                                    >
+                                        <SkipBack />
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => setIsPlaying(!isPlaying)}
+                                        className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                    >
+                                        {isPlaying ? <Pause /> : <Play />}
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => setCurrentStep(prev => Math.min(prev + 1, steps.length - 1))}
+                                        className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                                        disabled={currentStep >= steps.length - 1}
+                                    >
+                                        <SkipForward />
+                                    </button>
+
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700">Speed:</label>
+                                        <select
+                                            value={speed}
+                                            onChange={(e) => setSpeed(Number(e.target.value))}
+                                            className="px-3 py-1 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value={2500}>Slow</option>
+                                            <option value={1500}>Normal</option>
+                                            <option value={800}>Fast</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="ml-auto text-sm font-medium text-gray-700">
+                                        Step {currentStep + 1} / {steps.length}
+                                    </div>
+                                </div>
+
+                                {/* Step Info */}
+                                <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-600 rounded">
+                                    <div className="font-semibold text-gray-800 mb-1">{currentStepData?.description}</div>
+                                    <div className="text-sm font-mono text-gray-600">{currentStepData?.equation}</div>
+                                </div>
+
+                                {/* Matrices Display */}
+                                <div className="flex flex-wrap gap-8 justify-center items-start">
+                                    {method === 'lu' ? (
+                                        <>
+                                            {currentStepData?.L && <MatrixDisplay matrix={currentStepData.L} label="L" highlights={currentStepData.highlights} />}
+                                            {currentStepData?.U && <MatrixDisplay matrix={currentStepData.U} label="U" highlights={currentStepData.highlights} />}
+                                            {currentStepData?.y && <MatrixDisplay matrix={currentStepData.y} label="y" vectorLabel="y" highlights={currentStepData.highlights} />}
+                                            {currentStepData?.x && <MatrixDisplay matrix={currentStepData.x} label="x" vectorLabel="Solution x" highlights={currentStepData.highlights} />}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {currentStepData?.A && <MatrixDisplay matrix={currentStepData.A} label="A" highlights={currentStepData.highlights} />}
+                                            {currentStepData?.b && <MatrixDisplay matrix={currentStepData.b} label="b" vectorLabel="b" highlights={currentStepData.highlights} />}
+                                            {currentStepData?.x && <MatrixDisplay matrix={currentStepData.x} label="x" vectorLabel="Solution x" highlights={currentStepData.highlights} />}
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Final Solution */}
+                                {currentStepData?.isFinal && (
+                                    <div className="mt-6 p-4 bg-green-50 border-2 border-green-500 rounded-lg">
+                                        <div className="text-center font-bold text-green-800 text-lg mb-2">
+                                            ✓ Solution Found!
+                                        </div>
+                                        <div className="text-center text-gray-700">
+                                            Final solution vector: x = [{currentStepData.x.map(v => v.toFixed(3)).join(', ')}]
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="bg-gray-800 text-gray-300 py-6 mt-12">
+                        <div className="max-w-7xl mx-auto px-6 text-center">
+                            <p>© 2024 Mohamed Gazzeh · École Supérieure des Sciences et de Technologie de Hammam Sousse</p>
+                            <p className="text-sm mt-2">Educational Tool for Numerical Analysis</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<NumericalAnalysisVisualizer />, document.getElementById('root'));
+    </script>
+</body>
+</html>
